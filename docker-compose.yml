@@ -1,0 +1,112 @@
+version: '3'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    container_name: zookeeper
+    networks:
+      - kafkanet
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  broker:
+    image: confluentinc/cp-kafka:7.0.1
+    container_name: broker
+    ulimits:
+      core:
+        hard: 0
+        soft: 0
+    ports:
+      - "9092:9092"
+    networks:
+      - kafkanet
+    depends_on:
+      - zookeeper
+    restart: on-failure  
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  logstash-stdin:
+        build:
+          context: Compose
+          dockerfile: Dockerfile
+        container_name: logstash  
+        networks:
+          - kafkanet
+        stdin_open: true
+        tty: true
+        depends_on:
+          - broker
+        volumes:
+            - $PWD/Compose/pipeline/:/usr/share/logstash/pipeline/
+
+  spark:
+        build: 
+            context: spark
+            dockerfile: Dockerfile
+        container_name: spark-streaming
+        ulimits:
+          core:
+              hard: 0
+              soft: 0
+        networks:
+          - kafkanet
+        restart: on-failure  
+        depends_on:
+          - zookeeper
+          - broker    
+        deploy:
+          resources:
+            limits:
+              memory: 4g
+
+  elasticsearch:
+    container_name: elasticsearch
+    hostname: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.2.0
+    ports:
+      - "9200:9200"
+      - "9300:9300"      
+    environment:
+      - node.name=elasticsearch
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks: 
+    - kafkanet
+
+  kibana:
+    container_name: kibana
+    build:
+        context: Kibana    
+        dockerfile: Dockerfile
+    image: kibana            
+    hostname: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - xpack.security.enabled=false
+    depends_on: 
+      - elasticsearch
+    networks: 
+      - kafkanet 
+    
+                
+                      
+
+networks:
+  kafkanet:
+    name: kafkanet
+    driver: bridge
