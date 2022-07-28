@@ -155,12 +155,12 @@ def elaborate(batch_df: DataFrame, batch_id: int):
         #print("!!!!! payload: ")
         #print(payload)
         data = json.loads(payload)
-        temperature = 70
+        temperature = 60
         precipitations = 20
         temperatureList.append(temperature)
         precipitationList.append(precipitations)
 
-        temperature = 0
+        temperature = 10
         precipitations = 100
         temperatureList.append(temperature)
         precipitationList.append(precipitations)
